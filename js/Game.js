@@ -45,7 +45,47 @@ class Game {
 
             // Load first level
             this._initGame();
+            this._initGui();
         })
+    }
+
+    _initGui() {
+        // load texture
+        let texture = new BABYLON.Texture('assets/ball.png', this.scene, null, null ,null, () => {
+
+            var gui = new bGUI.GUISystem(this.scene);
+            var ball = new bGUI.GUIPanel("ball", texture, null, gui);
+            ball.relativePosition(new BABYLON.Vector3(0.60, 0.75, 0));
+            gui.updateCamera();
+
+
+            let delta = null;
+
+            let eventPrefix = BABYLON.Tools.GetPointerPrefix();
+            this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "down", () => {
+
+                let pickInfo = this.scene.pick(
+                    this.scene.pointerX,
+                    this.scene.pointerY,
+                    null,
+                    gui.getCamera()
+                );
+
+                if (pickInfo.hit){
+                    delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
+                    delta = delta.divide(ball.mesh.scaling).scaleInPlace(-2);
+                }
+            });
+
+            this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", () => {
+                if (delta) {
+
+                }
+            });
+
+        });
+
+
     }
 
     _initGame() {

@@ -55,6 +55,38 @@ var Game = (function () {
 
                 // Load first level
                 _this2._initGame();
+                _this2._initGui();
+            });
+        }
+    }, {
+        key: "_initGui",
+        value: function _initGui() {
+            var _this3 = this;
+
+            // load texture
+            var texture = new BABYLON.Texture('assets/ball.png', this.scene, null, null, null, function () {
+
+                var gui = new bGUI.GUISystem(_this3.scene);
+                var ball = new bGUI.GUIPanel("ball", texture, null, gui);
+                ball.relativePosition(new BABYLON.Vector3(0.60, 0.75, 0));
+                gui.updateCamera();
+
+                var delta = null;
+
+                var eventPrefix = BABYLON.Tools.GetPointerPrefix();
+                _this3.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "down", function () {
+
+                    var pickInfo = _this3.scene.pick(_this3.scene.pointerX, _this3.scene.pointerY, null, gui.getCamera());
+
+                    if (pickInfo.hit) {
+                        delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
+                        delta = delta.divide(ball.mesh.scaling).scaleInPlace(-2);
+                    }
+                });
+
+                _this3.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", function () {
+                    if (delta) {}
+                });
             });
         }
     }, {
