@@ -23,6 +23,7 @@ var Game = (function () {
 
         // The state scene
         this.scene = null;
+        this.spinForce = null;
 
         // Resize window event
         window.addEventListener("resize", function () {
@@ -41,7 +42,7 @@ var Game = (function () {
                 _this2.scene = scene;
 
                 // init camera
-                var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 0.1, 33), _this2.scene);
+                var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 5, 33), _this2.scene);
                 camera.setTarget(new BABYLON.Vector3(-1, -1, 45));
                 camera.attachControl(_this2.scene.getEngine().getRenderingCanvas());
                 _this2.scene.activeCamera = camera;
@@ -80,12 +81,39 @@ var Game = (function () {
 
                     if (pickInfo.hit) {
                         delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
-                        delta = delta.divide(ball.mesh.scaling).scaleInPlace(-2);
+                        delta = delta.divide(ball.mesh.scaling).scaleInPlace(2).scaleInPlace(4);
+                        delta.y *= 3;
+                        delta.z = 0;
                     }
                 });
 
+                var y = function y(x) {
+                    return 0.125 * (-x * x + 5 * x);
+                };
+
                 _this3.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", function () {
-                    if (delta) {}
+                    if (delta) {
+                        (function () {
+                            _this3.spinForce = delta.clone();
+                            var ball = _this3.scene.getMeshByName('ball');
+                            ball.applyImpulse(new BABYLON.Vector3(0, _this3.spinForce.y, 20), ball.position);
+
+                            _this3.spinForce.z = _this3.spinForce.y = 0;
+
+                            var counter = 0;
+
+                            var t = new Timer(100, _this3.scene, { autostart: true, autodestroy: true, immediate: true, repeat: 10 });
+                            t.callback = function () {
+                                ball.applyImpulse(_this3.spinForce.scale(y(counter)), ball.position);
+                                counter += 0.4;
+                                console.log(counter);
+                            };
+                            t.onFinish = function () {
+                                _this3.spinForce = null;
+                            };
+                            delta = null;
+                        })();
+                    }
                 });
             });
         }
@@ -100,26 +128,10 @@ var Game = (function () {
             ball.isPickable = true;
             ball.body = ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 });
 
-            var spinForce = null;
-
-            this.scene.onPointerDown = function (evt, pr) {
-                if (pr.pickedPoint) {
-                    spinForce = ball.position.subtract(pr.pickedPoint);
-                    ball.applyImpulse(new BABYLON.Vector3(0, spinForce.y * 150, 10), ball.position);
-
-                    spinForce.z = spinForce.y = 0;
-                    //spinForce.normalize().scaleInPlace(0.025);
-                }
-            };
-
+            // Reduce the ball speed when it is on the ground
             this.scene.registerBeforeRender(function () {
                 if (ball.position.y <= 0.11) {
-                    spinForce = null;
                     ball.body.body.linearVelocity.scaleEqual(0.97);
-                }
-
-                if (spinForce) {
-                    ball.applyImpulse(spinForce, ball.position);
                 }
             });
         }

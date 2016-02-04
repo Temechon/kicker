@@ -15,6 +15,7 @@ class Game {
 
         // The state scene
         this.scene          = null;
+        this.spinForce = null;
 
         // Resize window event
         window.addEventListener("resize", () => {
@@ -31,7 +32,7 @@ class Game {
             this.scene = scene;
 
             // init camera
-            let camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0,0.1,33), this.scene);
+            let camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0,5,33), this.scene);
             camera.setTarget(new BABYLON.Vector3(-1,-1,45));
             camera.attachControl(this.scene.getEngine().getRenderingCanvas());
             this.scene.activeCamera = camera;
@@ -73,16 +74,36 @@ class Game {
 
                 if (pickInfo.hit){
                     delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
-                    delta = delta.divide(ball.mesh.scaling).scaleInPlace(-2);
+                    delta = delta.divide(ball.mesh.scaling).scaleInPlace(2).scaleInPlace(4);
+                    delta.y *= 3;
+                    delta.z = 0;
                 }
             });
+
+            let y = (x) => {return 0.125*(-x*x +5*x)};
 
             this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", () => {
                 if (delta) {
+                    this.spinForce = delta.clone();
+                    let ball = this.scene.getMeshByName('ball');
+                    ball.applyImpulse(new BABYLON.Vector3(0, this.spinForce.y, 20), ball.position);
 
+                    this.spinForce.z = this.spinForce.y = 0;
+
+                    let counter = 0;
+
+                    let t = new Timer(100, this.scene, {autostart:true, autodestroy:true, immediate:true, repeat:10});
+                    t.callback = () => {
+                        ball.applyImpulse(this.spinForce.scale(y(counter)), ball.position);
+                        counter += 0.4;
+                        console.log(counter);
+                    };
+                    t.onFinish = () => {
+                        this.spinForce = null;
+                    };
+                    delta = null;
                 }
             });
-
         });
 
 
@@ -97,27 +118,10 @@ class Game {
         ball.isPickable = true;
         ball.body = ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 })
 
-        let spinForce = null;
-
-        this.scene.onPointerDown = (evt, pr) => {
-            if (pr.pickedPoint) {
-                spinForce = ball.position.subtract(pr.pickedPoint);
-                ball.applyImpulse(new BABYLON.Vector3(0, spinForce.y*150, 10), ball.position);
-
-                spinForce.z = spinForce.y = 0;
-                //spinForce.normalize().scaleInPlace(0.025);
-            }
-        };
-
-
+        // Reduce the ball speed when it is on the ground
         this.scene.registerBeforeRender(() => {
             if (ball.position.y <= 0.11){
-                spinForce = null;
                 ball.body.body.linearVelocity.scaleEqual(0.97);
-            }
-
-            if (spinForce){
-                ball.applyImpulse(spinForce, ball.position);
             }
         });
     }
