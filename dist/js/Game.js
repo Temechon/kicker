@@ -42,8 +42,9 @@ var Game = (function () {
                 _this2.scene = scene;
 
                 // init camera
-                var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0, 5, 33), _this2.scene);
-                camera.setTarget(new BABYLON.Vector3(-1, -1, 45));
+                var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(-35, 10, -7), _this2.scene);
+                var net = _this2.scene.getMeshByName('net');
+                camera.setTarget(net.position);
                 camera.attachControl(_this2.scene.getEngine().getRenderingCanvas());
                 _this2.scene.activeCamera = camera;
 
@@ -106,7 +107,6 @@ var Game = (function () {
                             t.callback = function () {
                                 ball.applyImpulse(_this3.spinForce.scale(y(counter)), ball.position);
                                 counter += 0.4;
-                                console.log(counter);
                             };
                             t.onFinish = function () {
                                 _this3.spinForce = null;
@@ -120,76 +120,36 @@ var Game = (function () {
     }, {
         key: "_initGame",
         value: function _initGame() {
+            var _this4 = this;
+
             this.scene.debugLayer.show();
 
             this.scene.enablePhysics(); // default gravity and default physics engine
 
             var ball = this.scene.getMeshByName('ball');
-            ball.isPickable = true;
+            ball.isInGoal = false;
+            var body0 = this.scene.getMeshByName('body0');
+
             ball.body = ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 });
 
             // Reduce the ball speed when it is on the ground
             this.scene.registerBeforeRender(function () {
-                if (ball.position.y <= 0.11) {
-                    ball.body.body.linearVelocity.scaleEqual(0.97);
+                // if (ball.position.y <= 0.11){
+                //     ball.body.body.linearVelocity.scaleEqual(0.97);
+                // }
+            });
+
+            // Remove physics force on the ball when in the goal
+            this.scene.registerBeforeRender(function () {
+                if (body0.intersectsMesh(ball) && !ball.isInGoal) {
+                    if (_this4.spinForce) {
+                        _this4.spinForce.copyFromFloats(0, 0, 0);
+                    }
+                    ball.body.body.linearVelocity.scaleEqual(0);
+                    ball.body.body.angularVelocity.scaleEqual(0);
+                    ball.isInGoal = true;
                 }
             });
-        }
-
-        /**
-         * Returns an integer in [min, max[
-         */
-    }, {
-        key: "createModel",
-
-        /**
-         * Create an instance model from the given name.
-         */
-        value: function createModel(name, parent) {
-            if (!this.assets[name]) {
-                console.warn('No asset corresponding.');
-            } else {
-                if (!parent) {
-                    parent = new GameObject(this);
-                }
-
-                var obj = this.assets[name];
-                //parent._animations = obj.animations;
-                var meshes = obj.meshes;
-
-                for (var i = 0; i < meshes.length; i++) {
-                    // Don't clone mesh without any vertices
-                    if (meshes[i].getTotalVertices() > 0) {
-
-                        var newmesh = meshes[i].clone(meshes[i].name, null, true);
-                        parent.addChildren(newmesh);
-
-                        if (meshes[i].skeleton) {
-                            newmesh.skeleton = meshes[i].skeleton.clone();
-                            this.scene.stopAnimation(newmesh);
-                        }
-                    }
-                }
-            }
-            return parent;
-        }
-    }], [{
-        key: "randomInt",
-        value: function randomInt(min, max) {
-            if (min === max) {
-                return min;
-            }
-            var random = Math.random();
-            return Math.floor(random * (max - min) + min);
-        }
-    }, {
-        key: "randomNumber",
-        value: function randomNumber(min, max) {
-            if (min === max) {
-                return min;
-            }
-            var random = Math.random();
-            return random * (max - min) + min;
         }
     }]);
 

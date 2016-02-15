@@ -32,8 +32,9 @@ class Game {
             this.scene = scene;
 
             // init camera
-            let camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(0,5,33), this.scene);
-            camera.setTarget(new BABYLON.Vector3(-1,-1,45));
+            let camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(-35,10,-7), this.scene);
+            let net = this.scene.getMeshByName('net'); 
+            camera.setTarget(net.position);
             camera.attachControl(this.scene.getEngine().getRenderingCanvas());
             this.scene.activeCamera = camera;
 
@@ -96,7 +97,6 @@ class Game {
                     t.callback = () => {
                         ball.applyImpulse(this.spinForce.scale(y(counter)), ball.position);
                         counter += 0.4;
-                        console.log(counter);
                     };
                     t.onFinish = () => {
                         this.spinForce = null;
@@ -115,65 +115,28 @@ class Game {
         this.scene.enablePhysics(); // default gravity and default physics engine
 
         let ball = this.scene.getMeshByName('ball');
-        ball.isPickable = true;
+        ball.isInGoal = false;
+        let body0 = this.scene.getMeshByName('body0');
+        
         ball.body = ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 })
 
         // Reduce the ball speed when it is on the ground
         this.scene.registerBeforeRender(() => {
-            if (ball.position.y <= 0.11){
-                ball.body.body.linearVelocity.scaleEqual(0.97);
+            // if (ball.position.y <= 0.11){
+            //     ball.body.body.linearVelocity.scaleEqual(0.97);
+            // }
+        });
+        
+        // Remove physics force on the ball when in the goal
+        this.scene.registerBeforeRender(() => { 
+            if (body0.intersectsMesh(ball) && !ball.isInGoal) {
+                if (this.spinForce) {
+                    this.spinForce.copyFromFloats(0,0,0);
+                }
+                ball.body.body.linearVelocity.scaleEqual(0);
+                ball.body.body.angularVelocity.scaleEqual(0);
+                ball.isInGoal = true; 
             }
         });
-    }
-
-    /**
-     * Returns an integer in [min, max[
-     */
-    static randomInt(min, max) {
-        if (min === max) {
-            return (min);
-        }
-        let random = Math.random();
-        return Math.floor(((random * (max - min)) + min));
-    }
-
-    static randomNumber(min, max) {
-        if (min === max) {
-            return (min);
-        }
-        let random = Math.random();
-        return (random * (max - min)) + min;
-    }
-
-    /**
-     * Create an instance model from the given name.
-     */
-    createModel(name, parent) {
-        if (! this.assets[name]) {
-            console.warn('No asset corresponding.');
-        } else {
-            if (!parent) {
-                parent = new GameObject(this);
-            }
-
-            let obj = this.assets[name];
-            //parent._animations = obj.animations;
-            let meshes = obj.meshes;
-
-            for (let i=0; i<meshes.length; i++ ){
-                // Don't clone mesh without any vertices
-                if (meshes[i].getTotalVertices() > 0) {
-
-                    let newmesh = meshes[i].clone(meshes[i].name, null, true);
-                    parent.addChildren(newmesh);
-
-                    if (meshes[i].skeleton) {
-                        newmesh.skeleton = meshes[i].skeleton.clone();
-                        this.scene.stopAnimation(newmesh);
-                    }
-                }
-            }
-        }
-        return parent;
     }
 }
