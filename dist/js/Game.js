@@ -150,6 +150,15 @@ var Game = (function () {
                     ball.isInGoal = true;
                 }
             });
+
+            var wall = this.scene.getMeshByName('wall');
+            var alpha = 0;
+
+            this.scene.registerBeforeRender(function () {
+                wall.position.x += 0.025 * Math.cos(alpha);
+                alpha += 0.01;
+                wall.updatePhysicsBodyPosition();
+            });
         }
     }]);
 

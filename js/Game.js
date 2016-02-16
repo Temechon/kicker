@@ -138,5 +138,14 @@ class Game {
                 ball.isInGoal = true; 
             }
         });
+        
+        let wall = this.scene.getMeshByName('wall');
+        let alpha = 0;
+        
+        this.scene.registerBeforeRender(() => { 
+            wall.position.x += 0.025*Math.cos(alpha);
+            alpha += 0.01;
+            wall.updatePhysicsBodyPosition();
+        });
     }
 }
