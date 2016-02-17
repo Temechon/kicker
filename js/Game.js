@@ -108,6 +108,10 @@ class Game {
 
 
     }
+    
+    playSound(sound) {
+        
+    }
 
     _initGame() {
         this.scene.debugLayer.show();
@@ -122,9 +126,9 @@ class Game {
 
         // Reduce the ball speed when it is on the ground
         this.scene.registerBeforeRender(() => {
-            // if (ball.position.y <= 0.11){
-            //     ball.body.body.linearVelocity.scaleEqual(0.97);
-            // }
+            if (ball.position.y <= 0.11){
+                ball.body.body.linearVelocity.scaleEqual(0.97);
+            }
         });
         
         // Remove physics force on the ball when in the goal
@@ -139,9 +143,9 @@ class Game {
             }
         });
         
+        // Animate wall in front of the goal
         let wall = this.scene.getMeshByName('wall');
-        let alpha = 0;
-        
+        let alpha = 0;        
         this.scene.registerBeforeRender(() => { 
             wall.position.x += 0.025*Math.cos(alpha);
             alpha += 0.01;
