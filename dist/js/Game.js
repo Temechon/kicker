@@ -17,13 +17,16 @@ var Game = (function () {
 
         var canvas = document.getElementById(canvasId);
         this.engine = new BABYLON.Engine(canvas, true);
+        this.scene = new BABYLON.Scene(this.engine);
 
-        // Contains all loaded assets needed for this state
-        this.assets = [];
-
-        // The state scene
-        this.scene = null;
+        // The ball spin force
         this.spinForce = null;
+
+        // All loaded sounds
+        this.sounds = [];
+
+        // All loaded gui textures
+        this.textures = [];
 
         // Resize window event
         window.addEventListener("resize", function () {
@@ -38,96 +41,156 @@ var Game = (function () {
         value: function run() {
             var _this2 = this;
 
-            BABYLON.SceneLoader.Load('assets/', 'kicker.babylon', this.engine, function (scene) {
-                _this2.scene = scene;
+            var loader = new BABYLON.AssetsManager(this.scene);
+            loader.addMeshTask("stadium", "", "./assets/", "kicker.babylon");
 
-                // init camera
-                var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(-35, 10, -7), _this2.scene);
-                var net = _this2.scene.getMeshByName('net');
-                camera.setTarget(net.position);
-                camera.attachControl(_this2.scene.getEngine().getRenderingCanvas());
-                _this2.scene.activeCamera = camera;
+            // Load sounds
+            var sounds = [{ name: 'ambient', path: 'assets/sounds/ambient.wav', loop: true, playOnLoaded: true, volume: 0.35 }, { name: 'goal', path: 'assets/sounds/goal.wav', loop: false, playOnLoaded: false, volume: 1.6 }, { name: 'whistle', path: 'assets/sounds/whistle.wav', loop: false, playOnLoaded: false, volume: 0.75 }, { name: 'whistle2', path: 'assets/sounds/whistle2.wav', loop: false, playOnLoaded: false, volume: 0.75 }, { name: 'kick', path: 'assets/sounds/kick.wav', loop: false, playOnLoaded: false, volume: 1 }, { name: 'wall', path: 'assets/sounds/wall.wav', loop: false, playOnLoaded: false, volume: 1.5 }];
+            sounds.forEach(function (s) {
+                var task = loader.addBinaryFileTask(s.name, s.path);
+                task.onSuccess = function (t) {
+                    _this2.sounds[t.name] = new BABYLON.Sound(t.name, t.data, _this2.scene, function () {
+                        // Set volume
+                        _this2.sounds[t.name].setVolume(s.volume);
+                        // Play on load ? useful for ambient track
+                        if (s.playOnLoaded) {
+                            _this2.sounds[t.name].play();
+                        }
+                    }, { loop: s.loop });
+                };
+            });
+
+            // Load textures
+            var texts = [{ name: 'ball', path: 'assets/gui/ball.png' }, { name: 'volume', path: 'assets/gui/volume.png' }, { name: 'mute', path: 'assets/gui/mute.png' }];
+            texts.forEach(function (text) {
+                var task = loader.addTextureTask(text.name, text.path);
+                task.onSuccess = function (t) {
+                    _this2.textures[t.name] = t.texture;
+                };
+            });
+
+            loader.onFinish = function () {
+
+                // Init scene : camera, light, skybox
+                _this2._initScene();
 
                 _this2.scene.executeWhenReady(function () {
-
                     _this2.engine.runRenderLoop(function () {
                         _this2.scene.render();
                     });
                 });
 
-                // Load first level
                 _this2._initGame();
                 _this2._initGui();
-            });
+            };
+
+            loader.load();
+        }
+    }, {
+        key: "_initScene",
+        value: function _initScene() {
+
+            this.scene.enablePhysics(); // default gravity and default physics engine
+
+            // Init light
+            var h = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), this.scene);
+            h.intensity += 1;
+
+            // init camera
+            var camera = new BABYLON.FreeCamera('camera', new BABYLON.Vector3(-35, 9.5, -7), this.scene);
+            var net = this.scene.getMeshByName('net');
+            camera.setTarget(net.position);
+            camera.attachControl(this.scene.getEngine().getRenderingCanvas());
+
+            var skybox = BABYLON.Mesh.CreateBox("skyBox", 1500.0, this.scene);
+            var skyboxMaterial = new BABYLON.StandardMaterial("skyBox", this.scene);
+            skyboxMaterial.backFaceCulling = false;
+            skyboxMaterial.reflectionTexture = new BABYLON.CubeTexture("assets/skybox/TropicalSunnyDay", this.scene);
+            skyboxMaterial.reflectionTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+            skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+            skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+            skybox.material = skyboxMaterial;
         }
     }, {
         key: "_initGui",
         value: function _initGui() {
             var _this3 = this;
 
-            // load texture
-            var texture = new BABYLON.Texture('assets/ball.png', this.scene, null, null, null, function () {
+            //Create GUI system
+            var gui = new bGUI.GUISystem(this.scene);
+            gui.enableClick();
+            // Volume
+            var volume = new bGUI.GUIPanel('vol', this.textures['volume'], null, gui);
+            volume.relativePosition(new BABYLON.Vector3(0.05, 0.05, 0));
+            var mute = new bGUI.GUIPanel('mute', this.textures['mute'], null, gui);
+            mute.relativePosition(new BABYLON.Vector3(0.05, 0.05, 0));
+            mute.setVisible(false);
+            mute.onClick = function () {
+                BABYLON.Engine.audioEngine.setGlobalVolume(1);
+                mute.setVisible(false);
+                volume.setVisible(true);
+            };
+            volume.onClick = function () {
+                BABYLON.Engine.audioEngine.setGlobalVolume(0);
+                volume.setVisible(false);
+                mute.setVisible(true);
+            };
 
-                var gui = new bGUI.GUISystem(_this3.scene);
-                var ball = new bGUI.GUIPanel("ball", texture, null, gui);
-                ball.relativePosition(new BABYLON.Vector3(0.60, 0.75, 0));
-                gui.updateCamera();
+            // Ball
+            var ball = new bGUI.GUIPanel("ball", this.textures['ball'], null, gui);
+            ball.relativePosition(new BABYLON.Vector3(0.60, 0.75, 0));
+            gui.updateCamera();
 
-                var delta = null;
+            var delta = null;
 
-                var eventPrefix = BABYLON.Tools.GetPointerPrefix();
-                _this3.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "down", function () {
+            var eventPrefix = BABYLON.Tools.GetPointerPrefix();
+            this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "down", function () {
 
-                    var pickInfo = _this3.scene.pick(_this3.scene.pointerX, _this3.scene.pointerY, null, gui.getCamera());
+                var pickInfo = _this3.scene.pick(_this3.scene.pointerX, _this3.scene.pointerY, null, gui.getCamera());
 
-                    if (pickInfo.hit) {
-                        delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
-                        delta = delta.divide(ball.mesh.scaling).scaleInPlace(2).scaleInPlace(4);
-                        delta.y *= 3;
-                        delta.z = 0;
-                    }
-                });
+                if (pickInfo.hit) {
+                    delta = ball.mesh.position.subtract(pickInfo.pickedPoint);
+                    delta = delta.divide(ball.mesh.scaling).scaleInPlace(2).scaleInPlace(4);
+                    delta.y *= 3;
+                    delta.z = 0;
+                }
+            });
 
-                var y = function y(x) {
-                    return 0.125 * (-x * x + 5 * x);
-                };
+            var y = function y(x) {
+                return 0.125 * (-x * x + 5 * x);
+            };
 
-                _this3.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", function () {
-                    if (delta) {
-                        (function () {
-                            _this3.spinForce = delta.clone();
-                            var ball = _this3.scene.getMeshByName('ball');
-                            ball.applyImpulse(new BABYLON.Vector3(0, _this3.spinForce.y, 20), ball.position);
+            this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", function () {
+                if (delta) {
+                    (function () {
+                        _this3.spinForce = delta.clone();
+                        var ball = _this3.scene.getMeshByName('ball');
+                        ball.applyImpulse(new BABYLON.Vector3(0, _this3.spinForce.y, 20), ball.position);
 
-                            _this3.spinForce.z = _this3.spinForce.y = 0;
+                        // Play kick sound
+                        _this3.sounds['kick'].play();
 
-                            var counter = 0;
+                        _this3.spinForce.z = _this3.spinForce.y = 0;
 
-                            var t = new Timer(100, _this3.scene, { autostart: true, autodestroy: true, immediate: true, repeat: 10 });
-                            t.callback = function () {
-                                ball.applyImpulse(_this3.spinForce.scale(y(counter)), ball.position);
-                                counter += 0.4;
-                            };
-                            t.onFinish = function () {
-                                _this3.spinForce = null;
-                            };
-                            delta = null;
-                        })();
-                    }
-                });
+                        var counter = 0;
+
+                        var t = new Timer(100, _this3.scene, { autostart: true, autodestroy: true, immediate: true, repeat: 10 });
+                        t.callback = function () {
+                            ball.applyImpulse(_this3.spinForce.scale(y(counter)), ball.position);
+                            counter += 0.4;
+                        };
+                        t.onFinish = function () {
+                            _this3.spinForce = null;
+                        };
+                        delta = null;
+                    })();
+                }
             });
         }
-    }, {
-        key: "playSound",
-        value: function playSound(sound) {}
     }, {
         key: "_initGame",
         value: function _initGame() {
             var _this4 = this;
-
-            this.scene.debugLayer.show();
-
-            this.scene.enablePhysics(); // default gravity and default physics engine
 
             var ball = this.scene.getMeshByName('ball');
             ball.isInGoal = false;
@@ -151,6 +214,8 @@ var Game = (function () {
                     ball.body.body.linearVelocity.scaleEqual(0);
                     ball.body.body.angularVelocity.scaleEqual(0);
                     ball.isInGoal = true;
+                    // Play goal sound
+                    _this4.sounds['goal'].play();
                 }
             });
 
@@ -158,9 +223,14 @@ var Game = (function () {
             var wall = this.scene.getMeshByName('wall');
             var alpha = 0;
             this.scene.registerBeforeRender(function () {
-                wall.position.x += 0.025 * Math.cos(alpha);
-                alpha += 0.01;
+                wall.position.x += 0.075 * Math.cos(alpha);
+                alpha += 0.1;
                 wall.updatePhysicsBodyPosition();
+
+                if (wall.intersectsMesh(ball)) {
+                    // Play wall sound
+                    _this4.sounds['wall'].play();
+                }
             });
         }
     }]);
