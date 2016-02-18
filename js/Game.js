@@ -19,6 +19,12 @@ class Game {
         
         // All loaded gui textures
         this.textures = [];
+        
+        // True if the player can kick the ball, false if the ball has already been kicked
+        this.canShoot = true;
+        
+        // The ball object
+        this.ball = null;
 
         // Resize window event
         window.addEventListener("resize", () => {
@@ -42,6 +48,7 @@ class Game {
             {name:'whistle2',   path:'assets/sounds/whistle2.wav', loop:false, playOnLoaded : false, volume:0.75},
             {name:'kick',       path:'assets/sounds/kick.wav', loop:false, playOnLoaded : false, volume:1},
             {name:'wall',       path:'assets/sounds/wall.wav', loop:false, playOnLoaded : false, volume:1.5},
+            {name:'miss',       path:'assets/sounds/miss.wav', loop:false, playOnLoaded : false, volume:1.5},
         ];
         sounds.forEach((s) => {
             let task = loader.addBinaryFileTask(s.name, s.path);
@@ -112,6 +119,10 @@ class Game {
         skyboxMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
         skyboxMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
         skybox.material = skyboxMaterial;
+        
+        // Get the ball
+        this.ball = this.scene.getMeshByName('ball'); 
+        this.startingPosition = this.ball.position.clone();
     }
 
     _initGui() {
@@ -138,14 +149,9 @@ class Game {
         // Ball
         var ball = new bGUI.GUIPanel("ball", this.textures['ball'], null, gui);
         ball.relativePosition(new BABYLON.Vector3(0.60, 0.75, 0));
-        gui.updateCamera();
-
-
+        
         let delta = null;
-
-        let eventPrefix = BABYLON.Tools.GetPointerPrefix();
-        this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "down", () => {
-
+        ball.onClick = () => {
             let pickInfo = this.scene.pick(
                 this.scene.pointerX,
                 this.scene.pointerY,
@@ -159,15 +165,17 @@ class Game {
                 delta.y *= 3;
                 delta.z = 0;
             }
-        });
+        }
 
+        let eventPrefix = BABYLON.Tools.GetPointerPrefix();
+
+        // Ball curl function
         let y = (x) => {return 0.125*(-x*x +5*x)};
 
         this.scene.getEngine().getRenderingCanvas().addEventListener(eventPrefix + "up", () => {
-            if (delta) {
+            if (delta && this.canShoot) {
                 this.spinForce = delta.clone();
-                let ball = this.scene.getMeshByName('ball');
-                ball.applyImpulse(new BABYLON.Vector3(0, this.spinForce.y, 20), ball.position);
+                this.ball.applyImpulse(new BABYLON.Vector3(0, this.spinForce.y, 30), this.ball.position.subtract(delta));
                 
                 // Play kick sound
                 this.sounds['kick'].play();
@@ -178,43 +186,73 @@ class Game {
 
                 let t = new Timer(100, this.scene, {autostart:true, autodestroy:true, immediate:true, repeat:10});
                 t.callback = () => {
-                    ball.applyImpulse(this.spinForce.scale(y(counter)), ball.position);
-                    counter += 0.4;
+                    if (this.spinForce) {
+                        this.ball.applyImpulse(this.spinForce.scale(y(counter)), this.ball.position);
+                        counter += 0.4;
+                    }
                 };
                 t.onFinish = () => {
                     this.spinForce = null;
                 };
+                this.canShoot = false;
                 delta = null;
             }
         });
+        
+        gui.updateCamera();
+    }
+    
+    /**
+     * Reset the ball at its starting position.
+     */
+    resetBall() {
+        this.ball.isInGoal = false;
+        this.ball.isOut = false;
+        this.spinForce = null;
+        
+        this.ball.position.copyFrom(this.startingPosition);
+        this.ball.updatePhysicsBodyPosition();
+        this.ball.body.body.linearVelocity.scaleEqual(0);
+        this.ball.body.body.angularVelocity.scaleEqual(0);
+        this.canShoot = true;        
     }
 
     _initGame() {
 
-        let ball = this.scene.getMeshByName('ball');
-        ball.isInGoal = false;
-        let body0 = this.scene.getMeshByName('body0');
-        
-        ball.body = ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 })
+        this.ball.body = this.ball.setPhysicsState(BABYLON.PhysicsEngine.SphereImpostor, { mass: 0.410, friction: 0.2, restitution: 0.8 })
 
         // Reduce the ball speed when it is on the ground
         this.scene.registerBeforeRender(() => {
-            if (ball.position.y <= 0.11){
-                ball.body.body.linearVelocity.scaleEqual(0.97);
+            if (this.ball.position.y <= 7.6){
+                this.ball.body.body.linearVelocity.scaleEqual(0.97);
             }
+            if (this.ball.position.z > 30 && !this.ball.isOut) {
+                this.ball.isOut = true;              
+                // Play miss sound
+                this.sounds['miss'].play();
+                // reset ball position
+                setTimeout(() => {
+                    this.resetBall();
+                }, 1200);
+            }            
         });
         
         // Remove physics force on the ball when in the goal
+        let goal = this.scene.getMeshByName('body0');
         this.scene.registerBeforeRender(() => { 
-            if (body0.intersectsMesh(ball) && !ball.isInGoal) {
+            if (goal.intersectsMesh(this.ball) && !this.ball.isInGoal) {
                 if (this.spinForce) {
-                    this.spinForce.copyFromFloats(0,0,0);
+                    this.spinForce.scaleInPlace(0);
                 }
-                ball.body.body.linearVelocity.scaleEqual(0);
-                ball.body.body.angularVelocity.scaleEqual(0);
-                ball.isInGoal = true;                 
+                this.ball.body.body.linearVelocity.scaleEqual(0);
+                this.ball.body.body.angularVelocity.scaleEqual(0);
+                this.ball.isInGoal = true;                 
                 // Play goal sound
                 this.sounds['goal'].play();
+                // reset ball position
+                setTimeout(() => {
+                    this.resetBall();
+                }, 1200);
             }
         });
         
@@ -222,11 +260,12 @@ class Game {
         let wall = this.scene.getMeshByName('wall');
         let alpha = 0;        
         this.scene.registerBeforeRender(() => { 
-            wall.position.x += 0.075*Math.cos(alpha);
+            // wall.position.x += 0.175*Math.cos(alpha);
+            // wall.position.y += 0.075*Math.cos(alpha*1.5);
             alpha += 0.1;
             wall.updatePhysicsBodyPosition();
             
-            if (wall.intersectsMesh(ball)) {         
+            if (wall.intersectsMesh(this.ball)) {         
                 // Play wall sound
                 this.sounds['wall'].play();
             }
